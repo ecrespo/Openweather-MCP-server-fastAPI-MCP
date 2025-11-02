@@ -3,14 +3,37 @@ import json
 from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import ORJSONResponse, JSONResponse
 from fastapi_mcp import FastApiMCP
+from fastapi_mcp.types import AuthConfig
 
 from utils.Weather import weather_request
 from utils.config import settings
 from utils.logger import log, log_json
+from utils.auth import LocalTokenValidator
 
 app = FastAPI()
+
+# --- MCP Authentication setup using LocalTokenValidator ---
+security = HTTPBearer(auto_error=True)
+_token_validator = LocalTokenValidator()
+
+
+async def authenticate_request(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """
+    Dependency used by fastapi-mcp to require a valid Bearer token for MCP tool invocations.
+    The token is validated using the LocalTokenValidator from auth.py.
+    """
+    token = credentials.credentials if credentials else None
+    info = _token_validator.validate_token(token)
+    if not info:
+        log.warning("Unauthorized MCP request - invalid or missing token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    log.debug("MCP request authenticated successfully")
+    return info
+
+
 
 
 @app.get("/weather/{city}/{country}",operation_id="get_weather_by_country")
@@ -54,7 +77,8 @@ mcp = FastApiMCP(
     include_operations=["get_weather_by_country"],
     description="Weather MCP Server provides weather information for a given country.",
     describe_all_responses=True,
-    describe_full_response_schema=True
+    describe_full_response_schema=True,
+    auth_config=AuthConfig(dependencies=[Depends(authenticate_request)]),
 )
 
 

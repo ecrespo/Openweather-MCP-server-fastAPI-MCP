@@ -47,7 +47,7 @@ class RichLogHandler:
         """Escribe el mensaje usando Rich"""
         message = message.rstrip()
         if message:
-            self.console.print(message, markup=False, highlight=False)
+            self.console.print(message, markup=True, highlight=False)
 
 
 def format_record(record: dict) -> str:
