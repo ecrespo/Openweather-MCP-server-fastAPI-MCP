@@ -1,0 +1,15 @@
+[project]
+name = "openweather-mcp-server-fastapi-mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[full]>=0.120.4",
+    "httpx>=0.28.1",
+    "loguru>=0.7.3",
+    "orjson>=3.11.4",
+    "python-decouple>=3.8",
+    "rich>=14.2.0",
+    "uvicorn>=0.38.0",
+]
