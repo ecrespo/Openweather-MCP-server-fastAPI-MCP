@@ -5,9 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi-mcp>=0.4.0",
     "fastapi[full]>=0.120.4",
     "httpx>=0.28.1",
     "loguru>=0.7.3",
+    "mcp-proxy>=0.10.0",
+    "mcp[cli]>=1.20.0",
     "orjson>=3.11.4",
     "python-decouple>=3.8",
     "rich>=14.2.0",

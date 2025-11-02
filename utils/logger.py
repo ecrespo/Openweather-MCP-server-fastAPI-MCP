@@ -29,7 +29,16 @@ console = Console(theme=custom_theme)
 
 
 class RichLogHandler:
-    """Handler personalizado que integra Rich con Loguru"""
+    """
+    Handles logging with Rich console.
+
+    This class provides a mechanism to display log messages using the Rich library's
+    `Console`. It ensures that messages are properly formatted and displayed on the
+    Rich console instance.
+
+    :ivar console: The Rich console instance used for displaying log messages.
+    :type console: Console
+    """
 
     def __init__(self, console: Console):
         self.console = console
@@ -42,7 +51,19 @@ class RichLogHandler:
 
 
 def format_record(record: dict) -> str:
-    """Formatea el registro de log para Rich"""
+    """
+    Formats a record dictionary into a color-coded and structured log string.
+
+    The function takes a record dictionary containing log information, such as the log level,
+    timestamp, file, function details, and message, and produces a formatted string with
+    colors for terminal logging.
+
+    :param record: A dictionary containing log record details. It includes the level,
+                   timestamp, file name, function name, line number, and the log message.
+    :type record: dict
+    :return: A formatted string with color-coded log information for terminal output.
+    :rtype: str
+    """
     level_colors = {
         "TRACE": "dim blue",
         "DEBUG": "cyan",
@@ -72,7 +93,25 @@ def format_record(record: dict) -> str:
 
 
 def setup_logger():
-    """Configura loguru con Rich para la aplicación"""
+    """
+    Configures and sets up a logger using the Loguru library. This function initializes
+    multiple log handlers including a console handler with Rich for enhanced
+    visual formatting, a file handler for storing logs to a designated location,
+    and an additional error-specific log file handler.
+
+    The logger configuration includes options for log formatting, level filtering,
+    log rotation, retention policies, compression, and detailed diagnostic and
+    backtrace options. It ensures the log file directory exists by creating
+    necessary parent directories if they do not already exist.
+
+    :raises FileNotFoundError: If the log file path or its parent directories cannot be created.
+    :raises ValueError: If any of the logger settings are invalid.
+    :raises TypeError: If incorrect argument types are provided.
+    :raises RuntimeError: For failures during logger handler setup.
+
+    :return: Configured instance of the logger.
+    :rtype: <type of `logger` configured>
+    """
 
     logger.remove()
 
@@ -134,12 +173,31 @@ def setup_logger():
 
 
 def log_section(title: str, style: str = "bold cyan"):
-    """Imprime una sección destacada"""
+    """
+
+    """
     console.rule(f"[{style}]{title}[/{style}]")
 
 
 def log_table(title: str, data: dict, style: str = "cyan"):
-    """Imprime una tabla formateada"""
+    """
+    Logs a table with specified title, data, and style using the rich library.
+
+    This function creates a table using the `rich.table.Table` class, adds the
+    provided data as rows, and prints it to the console. The table's visual
+    appearance can be customized with a title and a color style.
+
+    :param title: The title of the table to display.
+    :type title: str
+    :param data: A dictionary where each key-value pair represents a row in
+                 the table. Keys are displayed as column entries under "Campo,"
+                 and values under "Valor."
+    :type data: dict
+    :param style: (Optional) The color style to apply to the table's title.
+                  Defaults to "cyan".
+    :type style: str
+    :return: None
+    """
     from rich.table import Table
 
     table = Table(title=title, style=style)
@@ -153,7 +211,18 @@ def log_table(title: str, data: dict, style: str = "cyan"):
 
 
 def log_json(data: dict, title: str = "JSON Data"):
-    """Imprime JSON formateado"""
+    """
+    Logs a JSON-compatible Python dictionary to the console in a structured and
+    formatted manner. This function employs the `rich` library for displaying
+    the data with enhanced readability.
+
+    :param data: A dictionary containing JSON-compatible data to be logged.
+    :type data: dict
+    :param title: A string specifying the title to be displayed above the JSON
+        data in the console. Defaults to "JSON Data".
+    :type title: str, optional
+    :return: None
+    """
     from rich.json import JSON
 
     console.print(f"[bold cyan]{title}:[/bold cyan]")
@@ -161,14 +230,39 @@ def log_json(data: dict, title: str = "JSON Data"):
 
 
 def log_panel(message: str, title: str = None, style: str = "cyan"):
-    """Imprime un mensaje en un panel"""
+    """
+    Logs a styled message to the console within a Rich panel.
+
+    This function uses the Rich library to create a visually appealing panel
+    in the console. The message can be styled and optionally titled, providing
+    a clear and organized output for console applications.
+
+    :param message: The main content of the panel to be displayed in the console.
+    :type message: str
+    :param title: An optional title for the panel.
+    :type title: str, optional
+    :param style: The styling applied to the panel. Defaults to 'cyan'.
+    :type style: str, optional
+    :return: None
+    """
     from rich.panel import Panel
 
     console.print(Panel(message, title=title, style=style))
 
 
 def log_tree(data: dict, title: str = "Tree View"):
-    """Imprime una estructura de árbol"""
+    """
+    Log a hierarchical tree structure to the console. This function utilizes the `rich`
+    library to visually represent nested data, such as dictionaries or lists, in a
+    tree-like format for readability.
+
+    :param data: A dictionary or list containing the hierarchical data structure
+        to be logged as a tree.
+    :type data: dict
+    :param title: An optional title for the tree representation. Defaults to "Tree View".
+    :type title: str
+    :return: None
+    """
     from rich.tree import Tree
 
     def add_to_tree(tree, data):
@@ -193,12 +287,35 @@ def log_tree(data: dict, title: str = "Tree View"):
 
 
 def log_status(message: str, spinner: str = "dots"):
-    """Context manager para mostrar un spinner"""
+    """
+    Logs a status message with an optional spinner indicator. The function uses the
+    provided message and spinner type to display a styled status.
+
+    :param message: The status message to be logged.
+    :type message: str
+    :param spinner: The type of spinner to display alongside the message. Default
+        is "dots".
+    :type spinner: str
+    :return: A console status object representing the logged status.
+    :rtype: object
+    """
     return console.status(message, spinner=spinner)
 
 
 class LogContext:
-    """Context manager para agrupar logs"""
+    """
+    Provides a context manager for logging sections with a specified title and style.
+
+    This class simplifies logging by marking the beginning and the end of a
+    specific code section. It supports customizable styles for text formatting
+    and ensures that any exceptions raised within the context are also logged
+    appropriately.
+
+    :ivar title: The title of the log section.
+    :type title: str
+    :ivar style: The style of the log section's title. Defaults to "cyan".
+    :type style: str
+    """
 
     def __init__(self, title: str, style: str = "cyan"):
         self.title = title
