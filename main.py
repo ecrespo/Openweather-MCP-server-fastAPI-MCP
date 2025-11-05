@@ -2,11 +2,14 @@ import uvicorn
 import json
 from typing import List, Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi import FastAPI, HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import ORJSONResponse, JSONResponse
 from fastapi_mcp import FastApiMCP
 from fastapi_mcp.types import AuthConfig
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from utils.Weather import weather_request
 from utils.config import settings
@@ -14,6 +17,11 @@ from utils.logger import log, log_json
 from utils.auth import LocalTokenValidator
 
 app = FastAPI()
+
+# --- Rate Limiting setup with slowapi ---
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # --- MCP Authentication setup using LocalTokenValidator ---
 security = HTTPBearer(auto_error=True)
@@ -37,12 +45,15 @@ async def authenticate_request(credentials: HTTPAuthorizationCredentials = Depen
 
 
 @app.get("/weather/{city}/{country}",operation_id="get_weather_by_country")
-async def weather(city:str, country: Optional[str] = None) ->ORJSONResponse:
+@limiter.limit("50/minute")
+async def weather(request: Request, city:str, country: Optional[str] = None) ->ORJSONResponse:
     """
     Retrieves weather data for a given city and an optional country. This endpoint
     expects city and country as parameters, fetches the weather information using
     an external function, logs the response, and then returns it as an ORJSONResponse.
 
+    :param request: The FastAPI Request object (required for rate limiting).
+    :type request: Request
     :param city: The name of the city for which the weather data is being fetched.
     :type city: str
     :param country: The optional country name to refine the city query.
@@ -56,13 +67,16 @@ async def weather(city:str, country: Optional[str] = None) ->ORJSONResponse:
 
 
 @app.get("/",operation_id="hello_world")
-async def hello_world():
+@limiter.limit("100/minute")
+async def hello_world(request: Request):
     """
     Handles requests to the root endpoint and returns a JSON response with a greeting message.
 
     The request handler logs a "Hello World!" message for informational purposes before
     returning the JSON response.
 
+    :param request: The FastAPI Request object (required for rate limiting).
+    :type request: Request
     :returns:
         JSONResponse object containing the greeting message "Hello World!".
     """
