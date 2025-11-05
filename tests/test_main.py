@@ -1,23 +1,40 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock, AsyncMock, Mock
 import asyncio
 
 from fastapi import HTTPException
 from fastapi.responses import ORJSONResponse
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 from main import weather, app
 from utils.Weather import Weather
+from utils.container import get_container, reset_container
+from utils.dependencies import configure_container
+
+
+@pytest.fixture(autouse=True)
+def setup_di_container():
+    """Setup DI container before each test and clean up after."""
+    container = get_container()
+    configure_container(container)
+    yield
+    reset_container()
 
 
 # ============================================================================
 # Tests para endpoints REST básicos
 # ============================================================================
 
-@patch("main.weather_request")
+@patch("main.get_weather_repository")
 @patch("main.log_json")
 @pytest.mark.asyncio
-async def test_weather_success(mock_log_json, mock_weather_request):
+async def test_weather_success(mock_log_json, mock_get_repository):
     """Test successful weather request"""
+    # Create mock request
+    mock_request = Mock(spec=Request)
+    mock_request.client = Mock()
+    mock_request.client.host = "127.0.0.1"
+
     # Create a real Weather object
     weather_data = Weather(
         coord={"lon": -0.1257, "lat": 51.5085},
@@ -34,30 +51,42 @@ async def test_weather_success(mock_log_json, mock_weather_request):
         name="London",
         cod=200
     )
-    mock_weather_request.return_value = weather_data
 
-    response = await weather("London", "GB")
+    # Mock repository
+    mock_repository = Mock()
+    mock_repository.get_by_city = Mock(return_value=weather_data)
+    mock_get_repository.return_value = mock_repository
+
+    response = await weather(mock_request, "London", "GB", mock_repository)
     assert isinstance(response, ORJSONResponse)
     assert response.status_code == 200
 
     mock_log_json.assert_called_once()
-    mock_weather_request.assert_called_once_with("London", "GB")
+    mock_repository.get_by_city.assert_called_once_with("London", "GB")
 
 
-@patch("main.weather_request")
+@patch("main.get_weather_repository")
 @pytest.mark.asyncio
-async def test_weather_not_found(mock_weather_request):
+async def test_weather_not_found(mock_get_repository):
     """Test weather request for invalid city"""
-    mock_weather_request.side_effect = HTTPException(
-        status_code=404, detail="Error al obtener la información del clima"
+    # Create mock request
+    mock_request = Mock(spec=Request)
+    mock_request.client = Mock()
+    mock_request.client.host = "127.0.0.1"
+
+    # Mock repository to raise HTTPException
+    mock_repository = Mock()
+    mock_repository.get_by_city = Mock(
+        side_effect=HTTPException(status_code=404, detail="Error al obtener la información del clima")
     )
+    mock_get_repository.return_value = mock_repository
 
     with pytest.raises(HTTPException) as exc_info:
-        await weather("InvalidCity", "InvalidCountry")
+        await weather(mock_request, "InvalidCity", "InvalidCountry", mock_repository)
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Error al obtener la información del clima"
-    mock_weather_request.assert_called_once_with("InvalidCity", "InvalidCountry")
+    mock_repository.get_by_city.assert_called_once_with("InvalidCity", "InvalidCountry")
 
 
 def test_hello_world():
@@ -71,8 +100,8 @@ def test_hello_world():
     assert response.json() == "Hello World!"
 
 
-@patch("main.weather_request")
-def test_weather_endpoint_via_http(mock_weather_request):
+@patch("main.log_json")
+def test_weather_endpoint_via_http(mock_log_json):
     """Test weather endpoint via HTTP with TestClient"""
     # Create a real Weather object
     weather_data = Weather(
@@ -90,7 +119,15 @@ def test_weather_endpoint_via_http(mock_weather_request):
         name="London",
         cod=200
     )
-    mock_weather_request.return_value = weather_data
+
+    # Mock the repository in the DI container
+    from repositories.weather_repository import CachedWeatherRepository
+    mock_repository = Mock(spec=CachedWeatherRepository)
+    mock_repository.get_by_city = Mock(return_value=weather_data)
+
+    # Override the repository in the DI container
+    container = get_container()
+    container.register_instance(CachedWeatherRepository, mock_repository)
 
     client = TestClient(app)
     response = client.get("/weather/London/GB")
@@ -100,6 +137,9 @@ def test_weather_endpoint_via_http(mock_weather_request):
     assert data["name"] == "London"
     assert data["sys"]["country"] == "GB"
     assert data["main"]["temp"] == 20.0
+
+    mock_repository.get_by_city.assert_called_once_with("London", "GB")
+    mock_log_json.assert_called_once()
 
 
 # ============================================================================

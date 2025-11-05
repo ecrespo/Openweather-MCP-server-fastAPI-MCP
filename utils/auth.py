@@ -1,9 +1,10 @@
 from typing import Optional, Dict
 from utils.config import settings
 from utils.logger import log
+from protocols.auth_protocols import TokenValidator, TokenProvider
 
 
-class LocalTokenValidator:
+class LocalTokenValidator(TokenValidator):
     """
     Class to validate tokens against a locally stored token.
 
@@ -52,13 +53,15 @@ class LocalTokenValidator:
             return None
 
 
-class LocalTokenClient:
+class LocalTokenClient(TokenProvider):
     """
     Handles the retrieval of a locally stored token.
 
     This class is used to manage and provide access to a local token stored in the
     application configuration. It is useful in scenarios where authentication tokens
     are required and are stored securely within application settings.
+
+    Implements the TokenProvider protocol for consistency with other token providers.
 
     :ivar local_token: The local token retrieved from configuration settings for
         use in authentication or API calls.

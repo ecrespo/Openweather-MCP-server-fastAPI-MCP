@@ -1,17 +1,47 @@
+"""
+Enhanced Logging System with Structlog, Loguru, and Rich integration.
+
+This module provides a comprehensive logging solution that combines:
+- structlog for structured logging with context
+- loguru for powerful file rotation and formatting
+- rich for beautiful console output
+
+Features:
+- Structured logging with automatic context propagation
+- Beautiful console output with syntax highlighting
+- File rotation and compression
+- JSON logging support
+- Request tracing and correlation IDs
+- Performance metrics logging
+- Rich visual helpers (tables, trees, panels, etc.)
+"""
+
 import sys
+import contextvars
 from pathlib import Path
-from loguru import logger
+from typing import Any, Dict, Optional
+from datetime import datetime
+
+# Loguru imports
+from loguru import logger as loguru_logger
+
+# Rich imports
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.traceback import install as install_rich_traceback
 from rich.theme import Theme
 from rich.markup import escape
+
+# Structlog imports
+import structlog
+from structlog.types import EventDict, WrappedLogger
+
 from utils.config import settings
 
-# Instalar Rich traceback para mejores mensajes de error
+# Install Rich traceback for better error messages
 install_rich_traceback(show_locals=True)
 
-# Tema personalizado para los logs
+# Custom theme for logs
 custom_theme = Theme({
     "log.time": "dim cyan",
     "log.message": "white",
@@ -24,8 +54,16 @@ custom_theme = Theme({
     "log.level": "bold",
 })
 
-# Console de Rich para salida personalizada
+# Rich console for output
 console = Console(theme=custom_theme)
+
+# Context vars for request tracing
+request_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "request_id", default=None
+)
+user_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "user_id", default=None
+)
 
 
 class RichLogHandler:
@@ -44,7 +82,7 @@ class RichLogHandler:
         self.console = console
 
     def write(self, message):
-        """Escribe el mensaje usando Rich"""
+        """Write message using Rich"""
         message = message.rstrip()
         if message:
             self.console.print(message, markup=True, highlight=False)
@@ -92,33 +130,173 @@ def format_record(record: dict) -> str:
     return formatted
 
 
-def setup_logger():
+# ============================================================================
+# Structlog Integration
+# ============================================================================
+
+class LoguruWriter:
     """
-    Configures and sets up a logger using the Loguru library. This function initializes
-    multiple log handlers including a console handler with Rich for enhanced
-    visual formatting, a file handler for storing logs to a designated location,
-    and an additional error-specific log file handler.
+    Adapter to write structlog events to loguru.
 
-    The logger configuration includes options for log formatting, level filtering,
-    log rotation, retention policies, compression, and detailed diagnostic and
-    backtrace options. It ensures the log file directory exists by creating
-    necessary parent directories if they do not already exist.
-
-    :raises FileNotFoundError: If the log file path or its parent directories cannot be created.
-    :raises ValueError: If any of the logger settings are invalid.
-    :raises TypeError: If incorrect argument types are provided.
-    :raises RuntimeError: For failures during logger handler setup.
-
-    :return: Configured instance of the logger.
-    :rtype: <type of `logger` configured>
+    This bridges structlog's structured logging with loguru's powerful
+    output handling and file management.
     """
 
-    logger.remove()
+    def write(self, message: str) -> None:
+        """Write structured log message to loguru"""
+        loguru_logger.opt(depth=2, raw=True).info(message + "\n")
 
-    # Handler para consola con Rich
+    def flush(self) -> None:
+        """Flush is a no-op for loguru"""
+        pass
+
+
+def add_timestamp(
+    logger: WrappedLogger, method_name: str, event_dict: EventDict
+) -> EventDict:
+    """Add ISO timestamp to log event"""
+    event_dict["timestamp"] = datetime.utcnow().isoformat()
+    return event_dict
+
+
+def add_log_level_name(
+    logger: WrappedLogger, method_name: str, event_dict: EventDict
+) -> EventDict:
+    """Add log level name from method_name"""
+    event_dict["level"] = method_name.upper()
+    return event_dict
+
+
+def add_context_vars(
+    logger: WrappedLogger, method_name: str, event_dict: EventDict
+) -> EventDict:
+    """Add context variables (request_id, user_id) to log events"""
+    request_id = request_id_var.get()
+    if request_id:
+        event_dict["request_id"] = request_id
+
+    user_id = user_id_var.get()
+    if user_id:
+        event_dict["user_id"] = user_id
+
+    return event_dict
+
+
+def add_caller_info(
+    logger: WrappedLogger, method_name: str, event_dict: EventDict
+) -> EventDict:
+    """Add caller file and line information"""
+    # Get frame info from structlog
+    frame_info = event_dict.get("_frame_info")
+    if frame_info:
+        event_dict["file"] = frame_info[0]
+        event_dict["line"] = frame_info[1]
+        event_dict["function"] = frame_info[2]
+
+    return event_dict
+
+
+def censor_sensitive_data(
+    logger: WrappedLogger, method_name: str, event_dict: EventDict
+) -> EventDict:
+    """Censor sensitive data like passwords and tokens"""
+    sensitive_keys = {
+        "password", "passwd", "pwd", "secret", "token",
+        "api_key", "apikey", "access_token", "auth"
+    }
+
+    def _censor_dict(d: Dict[str, Any]) -> Dict[str, Any]:
+        """Recursively censor sensitive keys in dictionaries"""
+        censored = {}
+        for key, value in d.items():
+            if isinstance(value, dict):
+                censored[key] = _censor_dict(value)
+            elif any(sensitive in key.lower() for sensitive in sensitive_keys):
+                censored[key] = "***REDACTED***"
+            else:
+                censored[key] = value
+        return censored
+
+    # Censor event_dict keys
+    for key in list(event_dict.keys()):
+        if any(sensitive in key.lower() for sensitive in sensitive_keys):
+            event_dict[key] = "***REDACTED***"
+        elif isinstance(event_dict[key], dict):
+            event_dict[key] = _censor_dict(event_dict[key])
+
+    return event_dict
+
+
+def setup_structlog() -> structlog.BoundLogger:
+    """
+    Configure structlog with processors and loguru as backend.
+
+    This sets up the structlog pipeline with various processors for:
+    - Adding timestamps
+    - Adding log levels
+    - Adding context variables (request_id, user_id)
+    - Censoring sensitive data
+    - JSON rendering for structured output
+
+    Returns:
+        Configured structlog logger instance
+    """
+    structlog.configure(
+        processors=[
+            # Merge context from thread-local or context vars
+            structlog.contextvars.merge_contextvars,
+            # Add timestamp
+            add_timestamp,
+            # Add log level from method name
+            add_log_level_name,
+            # Add context vars (request_id, user_id)
+            add_context_vars,
+            # Add stack info if requested
+            structlog.processors.StackInfoRenderer(),
+            # Format exceptions
+            structlog.processors.format_exc_info,
+            # Censor sensitive data
+            censor_sensitive_data,
+            # Decode unicode
+            structlog.processors.UnicodeDecoder(),
+            # Add caller info
+            structlog.processors.CallsiteParameterAdder(
+                parameters=[
+                    structlog.processors.CallsiteParameter.FILENAME,
+                    structlog.processors.CallsiteParameter.LINENO,
+                    structlog.processors.CallsiteParameter.FUNC_NAME,
+                ],
+            ),
+            # Final rendering - JSON for structured logs
+            structlog.processors.JSONRenderer(),
+        ],
+        wrapper_class=structlog.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(file=LoguruWriter()),
+        cache_logger_on_first_use=True,
+    )
+
+    return structlog.get_logger()
+
+
+def setup_loguru():
+    """
+    Configure loguru with multiple handlers.
+
+    Sets up:
+    - Console handler with Rich formatting
+    - File handler with rotation and compression
+    - Error-only file handler
+
+    Returns:
+        Configured loguru logger
+    """
+    loguru_logger.remove()
+
+    # Handler for console with Rich
     rich_handler = RichLogHandler(console)
 
-    logger.add(
+    loguru_logger.add(
         rich_handler.write,
         format=format_record,
         level=settings.LOG_LEVEL,
@@ -127,7 +305,7 @@ def setup_logger():
         diagnose=True,
     )
 
-    # Handler para archivo
+    # Handler for file
     log_path = Path(settings.LOG_FILE)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -138,7 +316,7 @@ def setup_logger():
         "{message}"
     )
 
-    logger.add(
+    loguru_logger.add(
         settings.LOG_FILE,
         format=file_format,
         level=settings.LOG_LEVEL,
@@ -150,10 +328,10 @@ def setup_logger():
         diagnose=True,
     )
 
-    # Handler para errores
+    # Handler for errors
     error_log_file = log_path.parent / "errors.log"
 
-    logger.add(
+    loguru_logger.add(
         str(error_log_file),
         format=file_format,
         level="ERROR",
@@ -165,17 +343,134 @@ def setup_logger():
         diagnose=True,
     )
 
-    logger.info("✨ Logger configurado con Rich y Loguru")
-    logger.debug(f"📁 Logs guardados en: {settings.LOG_FILE}")
-    logger.debug(f"📊 Nivel de log: {settings.LOG_LEVEL}")
+    # JSON structured log file
+    json_log_file = log_path.parent / "structured.jsonl"
+    loguru_logger.add(
+        str(json_log_file),
+        format="{message}",  # Raw JSON from structlog
+        level=settings.LOG_LEVEL,
+        rotation=settings.LOG_ROTATION,
+        retention=settings.LOG_RETENTION,
+        compression="zip",
+        enqueue=True,
+        serialize=False,  # Already JSON from structlog
+    )
 
-    return logger
+    loguru_logger.info("✨ Logger configurado con Structlog, Rich y Loguru")
+    loguru_logger.debug(f"📁 Logs guardados en: {settings.LOG_FILE}")
+    loguru_logger.debug(f"📊 Nivel de log: {settings.LOG_LEVEL}")
 
+    return loguru_logger
+
+
+# ============================================================================
+# Context Managers for Request Tracing
+# ============================================================================
+
+class RequestContext:
+    """
+    Context manager for request-scoped logging.
+
+    Automatically adds request_id and other metadata to all logs
+    within the context.
+
+    Example:
+        with RequestContext(request_id="req-123", user_id="user-456"):
+            log.info("Processing request", action="upload")
+            # This log will include request_id and user_id automatically
+    """
+
+    def __init__(self, request_id: Optional[str] = None, user_id: Optional[str] = None, **extra):
+        self.request_id = request_id
+        self.user_id = user_id
+        self.extra = extra
+        self._tokens = []
+
+    def __enter__(self):
+        if self.request_id:
+            token = request_id_var.set(self.request_id)
+            self._tokens.append(("request_id", token))
+
+        if self.user_id:
+            token = user_id_var.set(self.user_id)
+            self._tokens.append(("user_id", token))
+
+        # Bind extra context to structlog
+        if self.extra:
+            structlog.contextvars.bind_contextvars(**self.extra)
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Reset context vars
+        for var_name, token in self._tokens:
+            if var_name == "request_id":
+                request_id_var.reset(token)
+            elif var_name == "user_id":
+                user_id_var.reset(token)
+
+        # Clear structlog context
+        if self.extra:
+            structlog.contextvars.clear_contextvars()
+
+        return False
+
+
+class PerformanceContext:
+    """
+    Context manager for performance logging.
+
+    Automatically logs execution time of a code block.
+
+    Example:
+        with PerformanceContext("database_query", query="SELECT * FROM users"):
+            # ... expensive operation ...
+            pass
+        # Logs: operation="database_query", duration_ms=123.45
+    """
+
+    def __init__(self, operation: str, **context):
+        self.operation = operation
+        self.context = context
+        self.start_time = None
+
+    def __enter__(self):
+        import time
+        self.start_time = time.perf_counter()
+        struct_log.debug("operation_started", operation=self.operation, **self.context)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        import time
+        duration_ms = (time.perf_counter() - self.start_time) * 1000
+
+        if exc_type is None:
+            struct_log.info(
+                "operation_completed",
+                operation=self.operation,
+                duration_ms=round(duration_ms, 2),
+                status="success",
+                **self.context
+            )
+        else:
+            struct_log.error(
+                "operation_failed",
+                operation=self.operation,
+                duration_ms=round(duration_ms, 2),
+                status="error",
+                error_type=exc_type.__name__,
+                **self.context
+            )
+
+        return False
+
+
+# ============================================================================
+# Rich Visual Helpers (Original functionality preserved)
+# ============================================================================
 
 def log_section(title: str, style: str = "bold cyan"):
-    """
-
-    """
+    """Log a section divider with title"""
     console.rule(f"[{style}]{title}[/{style}]")
 
 
@@ -333,17 +628,35 @@ class LogContext:
         return False
 
 
-# Inicializar logger
-log = setup_logger()
+# ============================================================================
+# Initialize Loggers
+# ============================================================================
+
+# Setup loguru first (backend)
+log = setup_loguru()
+
+# Setup structlog (structured logging frontend)
+struct_log = setup_structlog()
 
 __all__ = [
+    # Loguru logger (original)
     'log',
+    # Structlog logger (structured)
+    'struct_log',
+    # Rich console
     'console',
+    # Context managers
+    'RequestContext',
+    'PerformanceContext',
+    'LogContext',
+    # Context vars
+    'request_id_var',
+    'user_id_var',
+    # Visual helpers
     'log_section',
     'log_table',
     'log_json',
     'log_panel',
     'log_tree',
     'log_status',
-    'LogContext'
 ]

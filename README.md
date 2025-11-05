@@ -1,3 +1,4 @@
+
 # OpenWeather MCP Server with FastAPI
 
 [![Python](https://img.shields.io/badge/Python-3.13+-blue.svg)](https://www.python.org/downloads/)
@@ -39,15 +40,47 @@ Servidor MCP (Model Context Protocol) construido con FastAPI que proporciona inf
 
 ## 🚀 Características
 
+### Core Features
 - ✅ **Protocolo MCP sobre HTTP**: Implementación completa del protocolo MCP usando JSON-RPC 2.0
 - ✅ **API RESTful**: Endpoints REST tradicionales para consultas meteorológicas
 - ✅ **Autenticación Bearer Token**: Seguridad mediante tokens de autenticación local
 - ✅ **OpenWeatherMap Integration**: Datos meteorológicos en tiempo real
-- ✅ **Logging Avanzado**: Sistema de logging con Rich para mejor visualización
-- ✅ **Gestión de Sesiones**: Manejo de sesiones MCP con identificadores únicos
-- ✅ **Testing Completo**: Suite de pruebas unitarias con pytest
+
+### Architecture & Design Patterns
+- ✅ **Dependency Injection Container**: Sistema DI completo con soporte para singletons y transients
+- ✅ **Repository Pattern**: Capa de abstracción para acceso a datos con caching
+- ✅ **Circuit Breaker Pattern**: Protección contra fallos en cascada con recuperación automática
+- ✅ **Protocol-Based Design**: Interfaces claras con Python protocols para máxima flexibilidad
+
+### Logging & Observability
+- ✅ **Structured Logging**: Logs estructurados en JSON con Structlog para análisis avanzado
+- ✅ **Request Tracing**: Context propagation automático con request_id y user_id
+- ✅ **Performance Monitoring**: Medición automática de duración de operaciones
+- ✅ **Rich Console Output**: Visualización hermosa con syntax highlighting y colores
+- ✅ **Multiple Log Formats**: Console (Rich), archivo texto, JSON estructurado, errores separados
+- ✅ **Data Security**: Censura automática de passwords, tokens y API keys en logs
+
+### Testing & Quality
+- ✅ **Testing Completo**: Suite de pruebas unitarias con pytest (61 tests passing)
 - ✅ **Type Hints**: Código completamente tipado con Python type hints
 - ✅ **Configuración Flexible**: Variables de entorno para fácil configuración
+- ✅ **Rate Limiting**: Protección contra abuso con slowapi
+
+## 🆕 Novedades — 2025-11-05
+
+Hoy se incorporaron cambios importantes que ya están disponibles en el código y la documentación asociada:
+
+- Logging mejorado con Structlog + Loguru + Rich: logging estructurado (JSON), trazabilidad por request, métricas de desempeño y salida enriquecida en consola. Ver `utils/logger.py` y ejemplos en `examples/structured_logging_example.py`.
+- HTTP Client centralizado: nueva clase `HTTPClient` para unificar y testear llamadas HTTP (`utils/http_client.py`).
+- Contenedor de Dependencias (DI): `SimpleDIContainer` + helpers para wiring con FastAPI (`utils/container.py`, `utils/dependencies.py`).
+- Circuit Breaker: implementación `SimpleCircuitBreaker`, registro global y endpoints de monitoreo (`utils/circuit_breaker.py`, rutas en `main.py`).
+- Repositorios: `CachedWeatherRepository` para caching de respuestas y capa de acceso a datos (`repositories/weather_repository.py`).
+- Protocolos: interfaces tipadas para breaker, config, repositorios y clima (`protocols/*`).
+- Rate limiting con `slowapi`: límites globales/por-endpoint integrados vía dependencias (`utils/dependencies.py`).
+
+Documentación ampliada:
+- Ver guías dedicadas: `CIRCUIT_BREAKER.md`, `DI_CONTAINER.md`, `REPOSITORY_SUMMARY.md`, `PROTOCOLS_SUMMARY.md`, `ARCHITECTURE.md`, `IMPLEMENTATION_GUIDE.md`.
+- Nuevos endpoints documentados en la sección API (coordenadas, cache y circuit breaker).
 
 ## 🏗️ Arquitectura
 
@@ -250,6 +283,80 @@ curl http://localhost:8000/weather/London/GB
 }
 ```
 
+#### GET /weather/coordinates/{latitude}/{longitude}
+
+Obtiene información meteorológica por coordenadas geográficas.
+
+- `latitude` (float): -90 a 90
+- `longitude` (float): -180 a 180
+
+Ejemplo:
+```bash
+echo "Consulta por coordenadas"
+curl "http://localhost:8000/weather/coordinates/40.4168/-3.7038"
+```
+
+#### GET /weather/history/{city}
+
+Histórico de consultas para una ciudad. Útil para depuración y estadísticas locales.
+
+Parámetros query opcionales:
+- `country` (string): Código de país ISO 3166-1 alpha-2
+- `limit` (int): Número máximo de registros (por defecto 10)
+
+Ejemplo:
+```bash
+curl "http://localhost:8000/weather/history/Madrid?country=ES&limit=5"
+```
+
+#### GET /cache/stats
+
+Estadísticas de la caché del repositorio de clima.
+
+```bash
+curl http://localhost:8000/cache/stats
+```
+
+#### POST /cache/clear
+
+Limpia la caché del repositorio de clima.
+
+```bash
+curl -X POST http://localhost:8000/cache/clear
+```
+
+#### GET /circuit-breaker/stats
+
+Estadísticas globales de todos los circuit breakers registrados.
+
+```bash
+curl http://localhost:8000/circuit-breaker/stats
+```
+
+#### GET /circuit-breaker/{name}/stats
+
+Estadísticas de un circuit breaker específico.
+
+```bash
+curl http://localhost:8000/circuit-breaker/openweather/stats
+```
+
+#### POST /circuit-breaker/{name}/reset
+
+Reinicia el circuit breaker a estado CLOSED.
+
+```bash
+curl -X POST http://localhost:8000/circuit-breaker/openweather/reset
+```
+
+#### GET /circuit-breaker/list
+
+Lista de circuit breakers disponibles.
+
+```bash
+curl http://localhost:8000/circuit-breaker/list
+```
+
 ### MCP Endpoints
 
 #### POST /mcp
@@ -409,7 +516,7 @@ Authorization: Bearer <LOCAL_TOKEN>
 
 ```python
 headers = {
-    "Authorization": f"Bearer {your_token}",
+    "Authorization": "Bearer <LOCAL_TOKEN>",
     "Content-Type": "application/json"
 }
 ```
@@ -514,15 +621,12 @@ Servidor principal FastAPI que:
 
 Cliente HTTP para conectarse al servidor MCP.
 
-**Clase principal:**
-```python
-class MCPClientHTTP:
-    async def health_check()
-    async def initialize()
-    async def list_tools()
-    async def call_tool(tool_name, arguments)
-    async def close()
-```
+**Métodos disponibles (resumen):**
+- `health_check()`
+- `initialize()`
+- `list_tools()`
+- `call_tool(tool_name, arguments)`
+- `close()`
 
 ### utils/auth.py
 

@@ -1,8 +1,9 @@
 from decouple import config
-from typing import Optional
+from typing import Optional, Any
+from protocols.config_protocols import ConfigProvider
 
 
-class Settings:
+class Settings(ConfigProvider):
     """
     Handles the application configuration settings.
 
@@ -45,6 +46,77 @@ class Settings:
     # Session Configuration
     SESSION_TIMEOUT: int = config('SESSION_TIMEOUT', default=3600, cast=int)
     SESSION_CLEANUP_INTERVAL: int = config('SESSION_CLEANUP_INTERVAL', default=300, cast=int)
+
+    @classmethod
+    def get(cls, key: str, default: Any = None) -> Any:
+        """
+        Retrieves a configuration value by key.
+
+        Args:
+            key: The configuration key to retrieve
+            default: Default value to return if key is not found
+
+        Returns:
+            The configuration value if found, otherwise the default value
+        """
+        return getattr(cls, key, default)
+
+    @classmethod
+    def get_string(cls, key: str, default: str = "") -> str:
+        """
+        Retrieves a configuration value as a string.
+
+        Args:
+            key: The configuration key to retrieve
+            default: Default string value to return if key is not found
+
+        Returns:
+            The configuration value as a string
+        """
+        value = getattr(cls, key, default)
+        return str(value) if value is not None else default
+
+    @classmethod
+    def get_int(cls, key: str, default: int = 0) -> int:
+        """
+        Retrieves a configuration value as an integer.
+
+        Args:
+            key: The configuration key to retrieve
+            default: Default integer value to return if key is not found
+
+        Returns:
+            The configuration value as an integer
+
+        Raises:
+            ValueError: If the value cannot be converted to an integer
+        """
+        value = getattr(cls, key, default)
+        if isinstance(value, int):
+            return value
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
+    @classmethod
+    def get_bool(cls, key: str, default: bool = False) -> bool:
+        """
+        Retrieves a configuration value as a boolean.
+
+        Args:
+            key: The configuration key to retrieve
+            default: Default boolean value to return if key is not found
+
+        Returns:
+            The configuration value as a boolean
+        """
+        value = getattr(cls, key, default)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in ('true', '1', 'yes', 'on')
+        return bool(value) if value is not None else default
 
     @classmethod
     def validate(cls):

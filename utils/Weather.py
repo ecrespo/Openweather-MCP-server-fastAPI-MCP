@@ -1,10 +1,14 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from fastapi import HTTPException, status
 import httpx
 
 from utils.config import settings
 from utils.logger import log
+from utils.circuit_breaker import SimpleCircuitBreaker, circuit_breaker_registry, CircuitBreakerError
+
+if TYPE_CHECKING:
+    from utils.http_client import HTTPClient
 
 @dataclass
 class Weather:
@@ -103,3 +107,189 @@ def weather_request(city:str, country: Optional[str] = None)-> Weather:
 
     data = Weather(**resp)
     return data
+
+
+class OpenWeatherMapService:
+    """
+    OpenWeatherMap API implementation of weather service.
+
+    This class provides weather data retrieval functionality using the
+    OpenWeatherMap API. It can be used interchangeably with other weather
+    service implementations thanks to its adherence to the WeatherService protocol.
+
+    :ivar access_key: API key for OpenWeatherMap authentication
+    :type access_key: str
+    :ivar base_url: Base URL for the OpenWeatherMap API
+    :type base_url: str
+    """
+
+    def __init__(
+        self,
+        access_key: Optional[str] = None,
+        http_client: Optional['HTTPClient'] = None,
+        enable_circuit_breaker: bool = True,
+        failure_threshold: int = 5,
+        recovery_timeout: float = 60.0
+    ):
+        """
+        Initialize the OpenWeatherMap service.
+
+        Args:
+            access_key: Optional API key. If not provided, uses the key from settings
+            http_client: Optional HTTP client for making requests. If not provided, uses httpx directly
+            enable_circuit_breaker: Whether to enable circuit breaker protection
+            failure_threshold: Number of failures before opening circuit
+            recovery_timeout: Seconds to wait before attempting recovery
+        """
+        self.access_key = access_key or settings.ACCESS_KEY
+        self.base_url = "https://api.openweathermap.org/data/2.5/weather"
+        self.http_client = http_client
+
+        # Initialize circuit breaker
+        self.circuit_breaker: Optional[SimpleCircuitBreaker] = None
+        if enable_circuit_breaker:
+            self.circuit_breaker = SimpleCircuitBreaker(
+                failure_threshold=failure_threshold,
+                recovery_timeout=recovery_timeout,
+                success_threshold=2,
+                expected_exceptions=(httpx.HTTPError, HTTPException, ConnectionError, TimeoutError)
+            )
+            circuit_breaker_registry.register("openweathermap_api", self.circuit_breaker)
+            log.info(
+                f"OpenWeatherMapService initialized with Circuit Breaker "
+                f"(threshold={failure_threshold}, timeout={recovery_timeout}s)"
+            )
+        else:
+            log.info("OpenWeatherMapService initialized without Circuit Breaker")
+
+    def _make_api_call(self, params: Dict[str, Any]) -> Weather:
+        """
+        Internal method to make API call. This is wrapped by circuit breaker.
+
+        Args:
+            params: Query parameters for the API call
+
+        Returns:
+            Weather data
+
+        Raises:
+            HTTPException: On API errors
+        """
+        try:
+            # Use injected HTTP client if available, otherwise use httpx directly
+            if self.http_client:
+                response = self.http_client.get(self.base_url, params=params)
+            else:
+                response = httpx.get(self.base_url, params=params, timeout=10.0)
+        except httpx.ReadTimeout:
+            raise HTTPException(
+                status_code=status.HTTP_408_REQUEST_TIMEOUT,
+                detail="Tiempo de espera excedido"
+            )
+        except httpx.ConnectError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Error de conexión con el servicio de clima"
+            )
+
+        if response.status_code != 200:
+            log.error(f"API error: {response.status_code} - {response.text}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Error al obtener la información del clima"
+            )
+
+        resp = response.json()
+        return Weather(**resp)
+
+    def get_weather(self, city: str, country: Optional[str] = None) -> Weather:
+        """
+        Retrieves weather information for a specified city and optional country.
+
+        This method implements the WeatherService protocol's get_weather method.
+        Calls are protected by Circuit Breaker if enabled.
+
+        Args:
+            city: Name of the city for which weather information is requested
+            country: Optional country code to further specify the location
+                    (e.g., "US" for United States). Defaults to None.
+
+        Returns:
+            A Weather instance containing weather data for the specified location
+
+        Raises:
+            HTTPException: If the request times out, connection fails, or if
+                          the requested weather data could not be found
+            CircuitBreakerError: If circuit breaker is OPEN
+        """
+        query_param = f"{city}"
+        if country:
+            query_param += f",{country}"
+
+        parametros = {
+            "q": query_param,
+            "appid": self.access_key,
+            "units": "metric",
+            "lang": "es"
+        }
+
+        # Use circuit breaker if enabled
+        if self.circuit_breaker:
+            try:
+                return self.circuit_breaker.call(self._make_api_call, parametros)
+            except CircuitBreakerError as e:
+                log.error(f"Circuit breaker is OPEN for OpenWeatherMap API: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Weather service temporarily unavailable. Retry after {e.retry_after:.0f}s"
+                )
+        else:
+            return self._make_api_call(parametros)
+
+    def get_weather_by_coordinates(
+        self, latitude: float, longitude: float
+    ) -> Weather:
+        """
+        Retrieves weather information for specified geographic coordinates.
+
+        This method implements the WeatherService protocol's get_weather_by_coordinates method.
+        Calls are protected by Circuit Breaker if enabled.
+
+        Args:
+            latitude: Latitude coordinate (-90 to 90)
+            longitude: Longitude coordinate (-180 to 180)
+
+        Returns:
+            A Weather instance containing weather data for the specified coordinates
+
+        Raises:
+            HTTPException: If the request times out, connection fails, or if
+                          the requested weather data could not be found
+            ValueError: If the coordinates are out of valid range
+            CircuitBreakerError: If circuit breaker is OPEN
+        """
+        if not (-90 <= latitude <= 90):
+            raise ValueError(f"Latitude must be between -90 and 90, got {latitude}")
+        if not (-180 <= longitude <= 180):
+            raise ValueError(f"Longitude must be between -180 and 180, got {longitude}")
+
+        parametros = {
+            "lat": latitude,
+            "lon": longitude,
+            "appid": self.access_key,
+            "units": "metric",
+            "lang": "es"
+        }
+
+        # Use circuit breaker if enabled
+        if self.circuit_breaker:
+            try:
+                return self.circuit_breaker.call(self._make_api_call, parametros)
+            except CircuitBreakerError as e:
+                log.error(f"Circuit breaker is OPEN for OpenWeatherMap API: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Weather service temporarily unavailable. Retry after {e.retry_after:.0f}s"
+                )
+        else:
+            return self._make_api_call(parametros)
