@@ -16,6 +16,7 @@ from utils.config import settings
 from utils.logger import log, log_json
 from utils.auth import LocalTokenValidator
 from repositories.weather_repository import CachedWeatherRepository
+from utils.circuit_breaker import circuit_breaker_registry
 
 app = FastAPI()
 
@@ -169,6 +170,88 @@ async def clear_cache(request: Request) -> JSONResponse:
     weather_repository.clear_cache()
     log.info("Weather cache cleared via API")
     return JSONResponse(content={"message": "Cache cleared successfully"})
+
+
+@app.get("/circuit-breaker/stats", operation_id="get_circuit_breaker_stats")
+@limiter.limit("100/minute")
+async def circuit_breaker_stats(request: Request) -> JSONResponse:
+    """
+    Get statistics for all circuit breakers.
+
+    :param request: The FastAPI Request object (required for rate limiting)
+    :type request: Request
+    :return: Circuit breaker statistics in JSON format
+    :rtype: JSONResponse
+    """
+    stats = circuit_breaker_registry.get_all_stats()
+    return JSONResponse(content=stats)
+
+
+@app.get("/circuit-breaker/{name}/stats", operation_id="get_specific_circuit_breaker_stats")
+@limiter.limit("100/minute")
+async def specific_circuit_breaker_stats(request: Request, name: str) -> JSONResponse:
+    """
+    Get statistics for a specific circuit breaker.
+
+    :param request: The FastAPI Request object (required for rate limiting)
+    :type request: Request
+    :param name: Name of the circuit breaker
+    :type name: str
+    :return: Circuit breaker statistics in JSON format
+    :rtype: JSONResponse
+    """
+    breaker = circuit_breaker_registry.get(name)
+    if not breaker:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Circuit breaker '{name}' not found"
+        )
+
+    stats = breaker.get_stats()
+    return JSONResponse(content=stats)
+
+
+@app.post("/circuit-breaker/{name}/reset", operation_id="reset_circuit_breaker")
+@limiter.limit("10/minute")
+async def reset_circuit_breaker(request: Request, name: str) -> JSONResponse:
+    """
+    Reset a specific circuit breaker to CLOSED state.
+
+    :param request: The FastAPI Request object (required for rate limiting)
+    :type request: Request
+    :param name: Name of the circuit breaker to reset
+    :type name: str
+    :return: Confirmation message in JSON format
+    :rtype: JSONResponse
+    """
+    breaker = circuit_breaker_registry.get(name)
+    if not breaker:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Circuit breaker '{name}' not found"
+        )
+
+    breaker.reset()
+    log.info(f"Circuit breaker '{name}' reset via API")
+    return JSONResponse(content={
+        "message": f"Circuit breaker '{name}' reset successfully",
+        "state": breaker.state.value
+    })
+
+
+@app.get("/circuit-breaker/list", operation_id="list_circuit_breakers")
+@limiter.limit("100/minute")
+async def list_circuit_breakers(request: Request) -> JSONResponse:
+    """
+    List all registered circuit breakers.
+
+    :param request: The FastAPI Request object (required for rate limiting)
+    :type request: Request
+    :return: List of circuit breaker names in JSON format
+    :rtype: JSONResponse
+    """
+    breakers = circuit_breaker_registry.list_breakers()
+    return JSONResponse(content={"breakers": breakers, "count": len(breakers)})
 
 
 @app.get("/",operation_id="hello_world")

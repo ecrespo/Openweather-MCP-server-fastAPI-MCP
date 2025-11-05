@@ -27,16 +27,23 @@ class APIWeatherRepository:
     :type weather_service: OpenWeatherMapService
     """
 
-    def __init__(self, weather_service: Optional[OpenWeatherMapService] = None):
+    def __init__(
+        self,
+        weather_service: Optional[OpenWeatherMapService] = None,
+        enable_circuit_breaker: bool = True
+    ):
         """
         Initialize the API weather repository.
 
         Args:
             weather_service: Optional weather service. If not provided,
                            creates a new OpenWeatherMapService instance
+            enable_circuit_breaker: Whether to enable circuit breaker for API calls
         """
-        self.weather_service = weather_service or OpenWeatherMapService()
-        log.info("APIWeatherRepository initialized")
+        self.weather_service = weather_service or OpenWeatherMapService(
+            enable_circuit_breaker=enable_circuit_breaker
+        )
+        log.info(f"APIWeatherRepository initialized (circuit_breaker={enable_circuit_breaker})")
 
     def get_by_city(self, city: str, country: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """

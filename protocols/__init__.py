@@ -14,6 +14,7 @@ from protocols.repository_protocols import (
     TokenRepository,
     ConfigRepository
 )
+from protocols.circuit_breaker_protocols import CircuitBreaker, CircuitState, CircuitBreakerError
 
 __all__ = [
     'TokenValidator',
@@ -23,4 +24,7 @@ __all__ = [
     'WeatherRepository',
     'TokenRepository',
     'ConfigRepository',
+    'CircuitBreaker',
+    'CircuitState',
+    'CircuitBreakerError',
 ]
