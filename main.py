@@ -15,6 +15,7 @@ from utils.Weather import weather_request
 from utils.config import settings
 from utils.logger import log, log_json
 from utils.auth import LocalTokenValidator
+from repositories.weather_repository import CachedWeatherRepository
 
 app = FastAPI()
 
@@ -26,6 +27,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # --- MCP Authentication setup using LocalTokenValidator ---
 security = HTTPBearer(auto_error=True)
 _token_validator = LocalTokenValidator()
+
+# --- Weather Repository with caching ---
+weather_repository = CachedWeatherRepository(cache_ttl=300)  # 5 minute cache
 
 
 async def authenticate_request(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
@@ -49,8 +53,8 @@ async def authenticate_request(credentials: HTTPAuthorizationCredentials = Depen
 async def weather(request: Request, city:str, country: Optional[str] = None) ->ORJSONResponse:
     """
     Retrieves weather data for a given city and an optional country. This endpoint
-    expects city and country as parameters, fetches the weather information using
-    an external function, logs the response, and then returns it as an ORJSONResponse.
+    uses a cached repository to fetch weather information, reducing API calls and
+    improving performance.
 
     :param request: The FastAPI Request object (required for rate limiting).
     :type request: Request
@@ -61,9 +65,110 @@ async def weather(request: Request, city:str, country: Optional[str] = None) ->O
     :return: The weather data for the specified city and country in JSON format.
     :rtype: ORJSONResponse
     """
-    data = weather_request(city, country)
-    log_json(data.__dict__)
-    return ORJSONResponse(content=data.__dict__)
+    # Use repository with caching
+    data = weather_repository.get_by_city(city, country)
+
+    if data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Weather data not found for {city}"
+        )
+
+    log_json(data)
+    return ORJSONResponse(content=data)
+
+
+@app.get("/weather/coordinates/{latitude}/{longitude}", operation_id="get_weather_by_coordinates")
+@limiter.limit("50/minute")
+async def weather_by_coordinates(
+    request: Request,
+    latitude: float,
+    longitude: float
+) -> ORJSONResponse:
+    """
+    Retrieves weather data for specified geographic coordinates.
+
+    :param request: The FastAPI Request object (required for rate limiting)
+    :type request: Request
+    :param latitude: Latitude coordinate (-90 to 90)
+    :type latitude: float
+    :param longitude: Longitude coordinate (-180 to 180)
+    :type longitude: float
+    :return: The weather data for the specified coordinates in JSON format
+    :rtype: ORJSONResponse
+    """
+    data = weather_repository.get_by_coordinates(latitude, longitude)
+
+    if data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Weather data not found for coordinates ({latitude}, {longitude})"
+        )
+
+    log_json(data)
+    return ORJSONResponse(content=data)
+
+
+@app.get("/weather/history/{city}", operation_id="get_weather_history")
+@limiter.limit("30/minute")
+async def weather_history(
+    request: Request,
+    city: str,
+    country: Optional[str] = None,
+    limit: int = 10
+) -> JSONResponse:
+    """
+    Retrieves historical weather data for a specified city.
+
+    :param request: The FastAPI Request object (required for rate limiting)
+    :type request: Request
+    :param city: The name of the city
+    :type city: str
+    :param country: Optional country code
+    :type country: Optional[str]
+    :param limit: Maximum number of historical records (default: 10)
+    :type limit: int
+    :return: List of historical weather data in JSON format
+    :rtype: JSONResponse
+    """
+    history = weather_repository.get_history(city, country, limit)
+    return JSONResponse(content={
+        "city": city,
+        "country": country,
+        "count": len(history),
+        "history": history
+    })
+
+
+@app.get("/cache/stats", operation_id="get_cache_stats")
+@limiter.limit("100/minute")
+async def cache_stats(request: Request) -> JSONResponse:
+    """
+    Retrieves cache statistics.
+
+    :param request: The FastAPI Request object (required for rate limiting)
+    :type request: Request
+    :return: Cache statistics in JSON format
+    :rtype: JSONResponse
+    """
+    stats = weather_repository.get_cache_stats()
+    return JSONResponse(content=stats)
+
+
+@app.post("/cache/clear", operation_id="clear_cache")
+@limiter.limit("10/minute")
+async def clear_cache(request: Request) -> JSONResponse:
+    """
+    Clears the weather data cache.
+
+    :param request: The FastAPI Request object (required for rate limiting)
+    :type request: Request
+    :return: Confirmation message in JSON format
+    :rtype: JSONResponse
+    """
+    weather_repository.clear_cache()
+    log.info("Weather cache cleared via API")
+    return JSONResponse(content={"message": "Cache cleared successfully"})
 
 
 @app.get("/",operation_id="hello_world")

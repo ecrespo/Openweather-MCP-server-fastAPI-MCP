@@ -9,10 +9,18 @@ extensibility.
 from protocols.auth_protocols import TokenValidator, TokenProvider
 from protocols.weather_protocols import WeatherService
 from protocols.config_protocols import ConfigProvider
+from protocols.repository_protocols import (
+    WeatherRepository,
+    TokenRepository,
+    ConfigRepository
+)
 
 __all__ = [
     'TokenValidator',
     'TokenProvider',
     'WeatherService',
     'ConfigProvider',
+    'WeatherRepository',
+    'TokenRepository',
+    'ConfigRepository',
 ]
