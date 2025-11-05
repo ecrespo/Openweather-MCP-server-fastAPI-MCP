@@ -1,11 +1,14 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from fastapi import HTTPException, status
 import httpx
 
 from utils.config import settings
 from utils.logger import log
 from utils.circuit_breaker import SimpleCircuitBreaker, circuit_breaker_registry, CircuitBreakerError
+
+if TYPE_CHECKING:
+    from utils.http_client import HTTPClient
 
 @dataclass
 class Weather:
@@ -123,6 +126,7 @@ class OpenWeatherMapService:
     def __init__(
         self,
         access_key: Optional[str] = None,
+        http_client: Optional['HTTPClient'] = None,
         enable_circuit_breaker: bool = True,
         failure_threshold: int = 5,
         recovery_timeout: float = 60.0
@@ -132,12 +136,14 @@ class OpenWeatherMapService:
 
         Args:
             access_key: Optional API key. If not provided, uses the key from settings
+            http_client: Optional HTTP client for making requests. If not provided, uses httpx directly
             enable_circuit_breaker: Whether to enable circuit breaker protection
             failure_threshold: Number of failures before opening circuit
             recovery_timeout: Seconds to wait before attempting recovery
         """
         self.access_key = access_key or settings.ACCESS_KEY
         self.base_url = "https://api.openweathermap.org/data/2.5/weather"
+        self.http_client = http_client
 
         # Initialize circuit breaker
         self.circuit_breaker: Optional[SimpleCircuitBreaker] = None
@@ -170,7 +176,11 @@ class OpenWeatherMapService:
             HTTPException: On API errors
         """
         try:
-            response = httpx.get(self.base_url, params=params, timeout=10.0)
+            # Use injected HTTP client if available, otherwise use httpx directly
+            if self.http_client:
+                response = self.http_client.get(self.base_url, params=params)
+            else:
+                response = httpx.get(self.base_url, params=params, timeout=10.0)
         except httpx.ReadTimeout:
             raise HTTPException(
                 status_code=status.HTTP_408_REQUEST_TIMEOUT,

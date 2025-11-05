@@ -3,6 +3,7 @@
 from unittest.mock import patch, Mock
 
 import pytest
+import httpx
 from fastapi import HTTPException
 from httpx import Response
 from utils.Weather import weather_request, Weather
@@ -58,7 +59,7 @@ def test_weather_request_not_found(mock_get):
 
 @patch("httpx.get")
 def test_weather_request_timeout(mock_get):
-    mock_get.side_effect = httpx.ReadTimeout()
+    mock_get.side_effect = httpx.ReadTimeout("Request timed out")
 
     with pytest.raises(HTTPException) as exc_info:
         weather_request("London", "GB")

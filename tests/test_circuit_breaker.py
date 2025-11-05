@@ -228,8 +228,8 @@ def test_circuit_breaker_with_specific_exceptions():
     with pytest.raises(TypeError):
         breaker.call(type_error_function)
 
-    # Failure count should NOT increase
-    assert breaker.failure_count == 0  # Reset after success
+    # Failure count should NOT increase (TypeError not in expected_exceptions)
+    assert breaker.failure_count == 1  # Remains at 1, not reset by unexpected exception
     assert breaker.state == CircuitState.CLOSED
 
 

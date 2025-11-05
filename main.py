@@ -16,21 +16,27 @@ from utils.config import settings
 from utils.logger import log, log_json
 from utils.auth import LocalTokenValidator
 from repositories.weather_repository import CachedWeatherRepository
-from utils.circuit_breaker import circuit_breaker_registry
+from utils.circuit_breaker import CircuitBreakerRegistry
 from utils.container import get_container, SimpleDIContainer
-from utils.dependencies import configure_container, get_weather_repository, get_token_validator
+from utils.dependencies import (
+    configure_container,
+    get_weather_repository,
+    get_token_validator,
+    get_limiter,
+    get_circuit_breaker_registry
+)
 
 app = FastAPI()
-
-# --- Rate Limiting setup with slowapi ---
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # --- Dependency Injection Container Setup ---
 container = get_container()
 configure_container(container)
 log.info("Application dependencies configured via DI container")
+
+# --- Rate Limiting setup with slowapi (using DI) ---
+limiter = get_limiter()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # --- MCP Authentication setup using LocalTokenValidator ---
 security = HTTPBearer(auto_error=True)
@@ -203,22 +209,31 @@ async def clear_cache(
 
 @app.get("/circuit-breaker/stats", operation_id="get_circuit_breaker_stats")
 @limiter.limit("100/minute")
-async def circuit_breaker_stats(request: Request) -> JSONResponse:
+async def circuit_breaker_stats(
+    request: Request,
+    registry: CircuitBreakerRegistry = Depends(get_circuit_breaker_registry)
+) -> JSONResponse:
     """
     Get statistics for all circuit breakers.
 
     :param request: The FastAPI Request object (required for rate limiting)
     :type request: Request
+    :param registry: Circuit breaker registry (injected via DI)
+    :type registry: CircuitBreakerRegistry
     :return: Circuit breaker statistics in JSON format
     :rtype: JSONResponse
     """
-    stats = circuit_breaker_registry.get_all_stats()
+    stats = registry.get_all_stats()
     return JSONResponse(content=stats)
 
 
 @app.get("/circuit-breaker/{name}/stats", operation_id="get_specific_circuit_breaker_stats")
 @limiter.limit("100/minute")
-async def specific_circuit_breaker_stats(request: Request, name: str) -> JSONResponse:
+async def specific_circuit_breaker_stats(
+    request: Request,
+    name: str,
+    registry: CircuitBreakerRegistry = Depends(get_circuit_breaker_registry)
+) -> JSONResponse:
     """
     Get statistics for a specific circuit breaker.
 
@@ -226,10 +241,12 @@ async def specific_circuit_breaker_stats(request: Request, name: str) -> JSONRes
     :type request: Request
     :param name: Name of the circuit breaker
     :type name: str
+    :param registry: Circuit breaker registry (injected via DI)
+    :type registry: CircuitBreakerRegistry
     :return: Circuit breaker statistics in JSON format
     :rtype: JSONResponse
     """
-    breaker = circuit_breaker_registry.get(name)
+    breaker = registry.get(name)
     if not breaker:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -242,7 +259,11 @@ async def specific_circuit_breaker_stats(request: Request, name: str) -> JSONRes
 
 @app.post("/circuit-breaker/{name}/reset", operation_id="reset_circuit_breaker")
 @limiter.limit("10/minute")
-async def reset_circuit_breaker(request: Request, name: str) -> JSONResponse:
+async def reset_circuit_breaker(
+    request: Request,
+    name: str,
+    registry: CircuitBreakerRegistry = Depends(get_circuit_breaker_registry)
+) -> JSONResponse:
     """
     Reset a specific circuit breaker to CLOSED state.
 
@@ -250,10 +271,12 @@ async def reset_circuit_breaker(request: Request, name: str) -> JSONResponse:
     :type request: Request
     :param name: Name of the circuit breaker to reset
     :type name: str
+    :param registry: Circuit breaker registry (injected via DI)
+    :type registry: CircuitBreakerRegistry
     :return: Confirmation message in JSON format
     :rtype: JSONResponse
     """
-    breaker = circuit_breaker_registry.get(name)
+    breaker = registry.get(name)
     if not breaker:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -270,16 +293,21 @@ async def reset_circuit_breaker(request: Request, name: str) -> JSONResponse:
 
 @app.get("/circuit-breaker/list", operation_id="list_circuit_breakers")
 @limiter.limit("100/minute")
-async def list_circuit_breakers(request: Request) -> JSONResponse:
+async def list_circuit_breakers(
+    request: Request,
+    registry: CircuitBreakerRegistry = Depends(get_circuit_breaker_registry)
+) -> JSONResponse:
     """
     List all registered circuit breakers.
 
     :param request: The FastAPI Request object (required for rate limiting)
     :type request: Request
+    :param registry: Circuit breaker registry (injected via DI)
+    :type registry: CircuitBreakerRegistry
     :return: List of circuit breaker names in JSON format
     :rtype: JSONResponse
     """
-    breakers = circuit_breaker_registry.list_breakers()
+    breakers = registry.list_breakers()
     return JSONResponse(content={"breakers": breakers, "count": len(breakers)})
 
 

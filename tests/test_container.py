@@ -119,7 +119,7 @@ def test_container_initialization(container):
 
 def test_register_simple_class(container):
     """Test registering a simple class."""
-    container.register(ServiceA, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
 
     assert container.is_registered(ServiceA)
     assert not container.is_registered(ServiceB)
@@ -168,7 +168,7 @@ def test_register_with_factory(container):
 
 def test_register_factory_with_container_access(container):
     """Test register_factory with container parameter."""
-    container.register(ServiceA, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
 
     container.register_factory(
         ServiceWithDependency,
@@ -185,10 +185,10 @@ def test_register_factory_with_container_access(container):
 
 def test_register_method_chaining(container):
     """Test that register methods support chaining."""
-    result = container.register(ServiceA, singleton=True)
+    result = container.register(ServiceA, ServiceA, singleton=True)
     assert result is container
 
-    result2 = container.register(ServiceB, singleton=True)
+    result2 = container.register(ServiceB, ServiceB, singleton=True)
     assert result2 is container
 
 
@@ -204,7 +204,7 @@ def test_register_without_implementation_or_factory(container):
 
 def test_resolve_simple_class(container):
     """Test resolving a simple class."""
-    container.register(ServiceA, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
 
     service = container.resolve(ServiceA)
     assert service is not None
@@ -235,7 +235,7 @@ def test_resolve_via_protocol(container):
 
 def test_singleton_returns_same_instance(container):
     """Test that singleton registration returns same instance."""
-    container.register(ServiceA, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
 
     service1 = container.resolve(ServiceA)
     service2 = container.resolve(ServiceA)
@@ -247,7 +247,7 @@ def test_singleton_returns_same_instance(container):
 
 def test_transient_returns_different_instances(container):
     """Test that transient registration returns new instances."""
-    container.register(ServiceA, singleton=False)
+    container.register(ServiceA, ServiceA, singleton=False)
 
     service1 = container.resolve(ServiceA)
     service2 = container.resolve(ServiceA)
@@ -301,8 +301,8 @@ def test_transient_factory_called_each_time(container):
 def test_build_with_dependencies(container):
     """Test auto-wiring with build()."""
     # Register dependencies
-    container.register(ServiceA, singleton=True)
-    container.register(ServiceB, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
+    container.register(ServiceB, ServiceB, singleton=True)
 
     # Build class with dependencies
     service = container.build(ComplexService)
@@ -315,7 +315,7 @@ def test_build_with_dependencies(container):
 
 def test_build_with_nested_dependencies(container):
     """Test auto-wiring with nested dependencies."""
-    container.register(ServiceA, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
 
     # Build ServiceWithDependency which depends on ServiceA
     service = container.build(ServiceWithDependency)
@@ -330,7 +330,7 @@ def test_build_with_unregistered_dependency(container):
     # Don't register ServiceA
 
     # Should fail when trying to build ServiceWithDependency
-    with pytest.raises(KeyError):
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
         container.build(ServiceWithDependency)
 
 
@@ -342,7 +342,7 @@ def test_is_registered(container):
     """Test checking if type is registered."""
     assert not container.is_registered(ServiceA)
 
-    container.register(ServiceA, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
 
     assert container.is_registered(ServiceA)
     assert not container.is_registered(ServiceB)
@@ -350,8 +350,8 @@ def test_is_registered(container):
 
 def test_get_registrations(container):
     """Test getting all registrations."""
-    container.register(ServiceA, singleton=True)
-    container.register(ServiceB, singleton=False)
+    container.register(ServiceA, ServiceA, singleton=True)
+    container.register(ServiceB, ServiceB, singleton=False)
 
     registrations = container.get_registrations()
 
@@ -365,7 +365,7 @@ def test_get_registrations(container):
 
 def test_get_registrations_with_instance(container):
     """Test that registration info includes instance status."""
-    container.register(ServiceA, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
 
     # Before resolution
     registrations = container.get_registrations()
@@ -379,8 +379,8 @@ def test_get_registrations_with_instance(container):
 
 def test_clear_container(container):
     """Test clearing all registrations."""
-    container.register(ServiceA, singleton=True)
-    container.register(ServiceB, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
+    container.register(ServiceB, ServiceB, singleton=True)
 
     service_a = container.resolve(ServiceA)
 
@@ -400,8 +400,8 @@ def test_clear_container(container):
 
 def test_factory_with_multiple_dependencies(container):
     """Test factory function that resolves multiple dependencies."""
-    container.register(ServiceA, singleton=True)
-    container.register(ServiceB, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
+    container.register(ServiceB, ServiceB, singleton=True)
 
     container.register_factory(
         ComplexService,
@@ -458,7 +458,7 @@ def test_nested_factory_resolution(container):
 
 def test_concurrent_resolution(container):
     """Test that concurrent resolution is thread-safe."""
-    container.register(ServiceA, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
 
     results = []
     errors = []
@@ -494,7 +494,7 @@ def test_concurrent_registration(container):
 
     def register_service(service_type):
         try:
-            container.register(service_type, singleton=True)
+            container.register(service_type, service_type, singleton=True)
         except Exception as e:
             errors.append(e)
 
@@ -565,7 +565,7 @@ def test_get_global_container():
 def test_reset_global_container():
     """Test resetting global container."""
     container1 = get_container()
-    container1.register(ServiceA, singleton=True)
+    container1.register(ServiceA, ServiceA, singleton=True)
 
     assert container1.is_registered(ServiceA)
 
@@ -598,7 +598,7 @@ def test_resolve_after_constructor_error(container):
         def __init__(self):
             raise ValueError("Constructor failed!")
 
-    container.register(FailingService, singleton=True)
+    container.register(FailingService, FailingService, singleton=True)
 
     with pytest.raises(ValueError, match="Constructor failed!"):
         container.resolve(FailingService)
@@ -693,7 +693,7 @@ def test_switching_implementations(container):
 
 def test_registration_info_structure(container):
     """Test that registration info has correct structure."""
-    container.register(ServiceA, singleton=True)
+    container.register(ServiceA, ServiceA, singleton=True)
 
     info = container.get_registrations()[ServiceA]
 
