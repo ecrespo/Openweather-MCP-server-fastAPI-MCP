@@ -17,6 +17,8 @@ from utils.logger import log, log_json
 from utils.auth import LocalTokenValidator
 from repositories.weather_repository import CachedWeatherRepository
 from utils.circuit_breaker import circuit_breaker_registry
+from utils.container import get_container, SimpleDIContainer
+from utils.dependencies import configure_container, get_weather_repository, get_token_validator
 
 app = FastAPI()
 
@@ -25,21 +27,25 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# --- Dependency Injection Container Setup ---
+container = get_container()
+configure_container(container)
+log.info("Application dependencies configured via DI container")
+
 # --- MCP Authentication setup using LocalTokenValidator ---
 security = HTTPBearer(auto_error=True)
-_token_validator = LocalTokenValidator()
-
-# --- Weather Repository with caching ---
-weather_repository = CachedWeatherRepository(cache_ttl=300)  # 5 minute cache
 
 
-async def authenticate_request(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+async def authenticate_request(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    validator: LocalTokenValidator = Depends(get_token_validator)
+) -> dict:
     """
     Dependency used by fastapi-mcp to require a valid Bearer token for MCP tool invocations.
-    The token is validated using the LocalTokenValidator from auth.py.
+    The token is validated using the LocalTokenValidator from DI container.
     """
     token = credentials.credentials if credentials else None
-    info = _token_validator.validate_token(token)
+    info = validator.validate_token(token)
     if not info:
         log.warning("Unauthorized MCP request - invalid or missing token")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
@@ -51,23 +57,30 @@ async def authenticate_request(credentials: HTTPAuthorizationCredentials = Depen
 
 @app.get("/weather/{city}/{country}",operation_id="get_weather_by_country")
 @limiter.limit("50/minute")
-async def weather(request: Request, city:str, country: Optional[str] = None) ->ORJSONResponse:
+async def weather(
+    request: Request,
+    city: str,
+    country: Optional[str] = None,
+    repository: CachedWeatherRepository = Depends(get_weather_repository)
+) -> ORJSONResponse:
     """
     Retrieves weather data for a given city and an optional country. This endpoint
-    uses a cached repository to fetch weather information, reducing API calls and
-    improving performance.
+    uses a cached repository (injected via DI) to fetch weather information,
+    reducing API calls and improving performance.
 
-    :param request: The FastAPI Request object (required for rate limiting).
+    :param request: The FastAPI Request object (required for rate limiting)
     :type request: Request
-    :param city: The name of the city for which the weather data is being fetched.
+    :param city: The name of the city for which the weather data is being fetched
     :type city: str
-    :param country: The optional country name to refine the city query.
+    :param country: The optional country name to refine the city query
     :type country: Optional[str]
-    :return: The weather data for the specified city and country in JSON format.
+    :param repository: Weather repository (injected via DI)
+    :type repository: CachedWeatherRepository
+    :return: The weather data for the specified city and country in JSON format
     :rtype: ORJSONResponse
     """
-    # Use repository with caching
-    data = weather_repository.get_by_city(city, country)
+    # Use repository from DI container
+    data = repository.get_by_city(city, country)
 
     if data is None:
         raise HTTPException(
@@ -84,7 +97,8 @@ async def weather(request: Request, city:str, country: Optional[str] = None) ->O
 async def weather_by_coordinates(
     request: Request,
     latitude: float,
-    longitude: float
+    longitude: float,
+    repository: CachedWeatherRepository = Depends(get_weather_repository)
 ) -> ORJSONResponse:
     """
     Retrieves weather data for specified geographic coordinates.
@@ -95,10 +109,12 @@ async def weather_by_coordinates(
     :type latitude: float
     :param longitude: Longitude coordinate (-180 to 180)
     :type longitude: float
+    :param repository: Weather repository (injected via DI)
+    :type repository: CachedWeatherRepository
     :return: The weather data for the specified coordinates in JSON format
     :rtype: ORJSONResponse
     """
-    data = weather_repository.get_by_coordinates(latitude, longitude)
+    data = repository.get_by_coordinates(latitude, longitude)
 
     if data is None:
         raise HTTPException(
@@ -116,7 +132,8 @@ async def weather_history(
     request: Request,
     city: str,
     country: Optional[str] = None,
-    limit: int = 10
+    limit: int = 10,
+    repository: CachedWeatherRepository = Depends(get_weather_repository)
 ) -> JSONResponse:
     """
     Retrieves historical weather data for a specified city.
@@ -129,10 +146,12 @@ async def weather_history(
     :type country: Optional[str]
     :param limit: Maximum number of historical records (default: 10)
     :type limit: int
+    :param repository: Weather repository (injected via DI)
+    :type repository: CachedWeatherRepository
     :return: List of historical weather data in JSON format
     :rtype: JSONResponse
     """
-    history = weather_repository.get_history(city, country, limit)
+    history = repository.get_history(city, country, limit)
     return JSONResponse(content={
         "city": city,
         "country": country,
@@ -143,31 +162,41 @@ async def weather_history(
 
 @app.get("/cache/stats", operation_id="get_cache_stats")
 @limiter.limit("100/minute")
-async def cache_stats(request: Request) -> JSONResponse:
+async def cache_stats(
+    request: Request,
+    repository: CachedWeatherRepository = Depends(get_weather_repository)
+) -> JSONResponse:
     """
     Retrieves cache statistics.
 
     :param request: The FastAPI Request object (required for rate limiting)
     :type request: Request
+    :param repository: Weather repository (injected via DI)
+    :type repository: CachedWeatherRepository
     :return: Cache statistics in JSON format
     :rtype: JSONResponse
     """
-    stats = weather_repository.get_cache_stats()
+    stats = repository.get_cache_stats()
     return JSONResponse(content=stats)
 
 
 @app.post("/cache/clear", operation_id="clear_cache")
 @limiter.limit("10/minute")
-async def clear_cache(request: Request) -> JSONResponse:
+async def clear_cache(
+    request: Request,
+    repository: CachedWeatherRepository = Depends(get_weather_repository)
+) -> JSONResponse:
     """
     Clears the weather data cache.
 
     :param request: The FastAPI Request object (required for rate limiting)
     :type request: Request
+    :param repository: Weather repository (injected via DI)
+    :type repository: CachedWeatherRepository
     :return: Confirmation message in JSON format
     :rtype: JSONResponse
     """
-    weather_repository.clear_cache()
+    repository.clear_cache()
     log.info("Weather cache cleared via API")
     return JSONResponse(content={"message": "Cache cleared successfully"})
 

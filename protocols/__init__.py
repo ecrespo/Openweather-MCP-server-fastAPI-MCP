@@ -15,6 +15,7 @@ from protocols.repository_protocols import (
     ConfigRepository
 )
 from protocols.circuit_breaker_protocols import CircuitBreaker, CircuitState, CircuitBreakerError
+from protocols.container_protocols import DIContainer, ScopedDIContainer
 
 __all__ = [
     'TokenValidator',
@@ -27,4 +28,6 @@ __all__ = [
     'CircuitBreaker',
     'CircuitState',
     'CircuitBreakerError',
+    'DIContainer',
+    'ScopedDIContainer',
 ]
