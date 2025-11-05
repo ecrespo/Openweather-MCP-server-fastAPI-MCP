@@ -1,0 +1,235 @@
+✨ Logger configurado con Structlog, Rich y Loguru
+✨ Logger configurado con Structlog, Rich y Loguru
+✨ Logger configurado con Structlog, Rich y Loguru
+This is an info message
+This is a warning message
+This is an error message
+User logged in: user_id=123
+✨ Logger configurado con Structlog, Rich y Loguru
+This is an info message
+This is a warning message
+This is an error message
+User logged in: user_id=123
+✨ Logger configurado con Structlog, Rich y Loguru
+This is an info message
+This is a warning message
+This is an error message
+User logged in: user_id=123
+{"user_id": 123, "username": "john_doe", "ip": "192.168.1.1", "event": "user_logged_in", "timestamp": "2025-11-05T18:45:39.248487", "level": "INFO", "filename": "structured_logging_example.py", "lineno": 47, "func_name": "example_structured_logging"}
+
+
+{"method": "POST", "path": "/api/users", "headers": {"content-type": "application/json"}, "body": {"name": "John", "email": "john@example.com"}, "event": "api_request_received", "timestamp": "2025-11-05T18:45:39.248915", "level": "INFO", "filename": "structured_logging_example.py", "lineno": 50, "func_name": "example_structured_logging"}
+
+
+{"query": "SELECT * FROM users", "duration_ms": 45.2, "rows_returned": 150, "event": "database_query_completed", "timestamp": "2025-11-05T18:45:39.249337", "level": "INFO", "filename": "structured_logging_example.py", "lineno": 59, "func_name": "example_structured_logging"}
+
+
+{"username": "john_doe", "password": "***REDACTED***", "api_key": "***REDACTED***", "email": "john@example.com", "event": "user_authenticated", "timestamp": "2025-11-05T18:45:39.249718", "level": "INFO", "filename": "structured_logging_example.py", "lineno": 67, "func_name": "example_structured_logging"}
+
+
+{"city": "London", "country": "GB", "event": "request_started", "path": "/api/weather", "method": "GET", "timestamp": "2025-11-05T18:45:39.250416", "level": "INFO", "request_id": "64766c88-c88d-44e9-b1d3-4416bdea72ff", "user_id": "user-456", "filename": "structured_logging_example.py", "lineno": 85, "func_name": "example_request_context"}
+
+
+{"provider": "OpenWeatherMap", "event": "fetching_weather_data", "path": "/api/weather", "method": "GET", "timestamp": "2025-11-05T18:45:39.350944", "level": "INFO", "request_id": "64766c88-c88d-44e9-b1d3-4416bdea72ff", "user_id": "user-456", "filename": "structured_logging_example.py", "lineno": 90, "func_name": "example_request_context"}
+
+
+{"status_code": 200, "response_size_bytes": 1024, "event": "request_completed", "path": "/api/weather", "method": "GET", "timestamp": "2025-11-05T18:45:39.451883", "level": "INFO", "request_id": "64766c88-c88d-44e9-b1d3-4416bdea72ff", "user_id": "user-456", "filename": "structured_logging_example.py", "lineno": 95, "func_name": "example_request_context"}
+
+
+{"task_name": "cleanup", "event": "background_task_completed", "timestamp": "2025-11-05T18:45:39.452758", "level": "INFO", "filename": "structured_logging_example.py", "lineno": 98, "func_name": "example_request_context"}
+
+
+{"operation": "database_query", "query": "SELECT * FROM weather_data WHERE city = ?", "city": "Madrid", "event": "operation_started", "timestamp": "2025-11-05T18:45:39.453871", "level": "DEBUG", "filename": "logger.py", "lineno": 440, "func_name": "__enter__"}
+
+
+{"operation": "database_query", "duration_ms": 150.7, "status": "success", "query": "SELECT * FROM weather_data WHERE city = ?", "city": "Madrid", "event": "operation_completed", "timestamp": "2025-11-05T18:45:39.604602", "level": "INFO", "filename": "logger.py", "lineno": 448, "func_name": "__exit__"}
+
+
+{"operation": "api_request", "endpoint": "/api/weather/London/GB", "event": "operation_started", "timestamp": "2025-11-05T18:45:39.605510", "level": "DEBUG", "filename": "logger.py", "lineno": 440, "func_name": "__enter__"}
+
+
+{"event": "validating_request", "timestamp": "2025-11-05T18:45:39.606092", "level": "INFO", "filename": "structured_logging_example.py", "lineno": 114, "func_name": "example_performance_context"}
+
+
+{"operation": "database_lookup", "table": "weather_cache", "event": "operation_started", "timestamp": "2025-11-05T18:45:39.656832", "level": "DEBUG", "filename": "logger.py", "lineno": 440, "func_name": "__enter__"}
+
+
+{"operation": "database_lookup", "duration_ms": 100.87, "status": "success", "table": "weather_cache", "event": "operation_completed", "timestamp": "2025-11-05T18:45:39.757710", "level": "INFO", "filename": "logger.py", "lineno": 448, "func_name": "__exit__"}
+
+
+{"operation": "external_api_call", "provider": "OpenWeatherMap", "event": "operation_started", "timestamp": "2025-11-05T18:45:39.758577", "level": "DEBUG", "filename": "logger.py", "lineno": 440, "func_name": "__enter__"}
+
+
+{"operation": "external_api_call", "duration_ms": 200.72, "status": "success", "provider": "OpenWeatherMap", "event": "operation_completed", "timestamp": "2025-11-05T18:45:39.959337", "level": "INFO", "filename": "logger.py", "lineno": 448, "func_name": "__exit__"}
+
+
+{"operation": "api_request", "duration_ms": 354.63, "status": "success", "endpoint": "/api/weather/London/GB", "event": "operation_completed", "timestamp": "2025-11-05T18:45:39.960138", "level": "INFO", "filename": "logger.py", "lineno": 448, "func_name": "__exit__"}
+
+
+{"operation": "calculate_average", "numerator": 10, "denominator": 0, "event": "division_by_zero_error", "timestamp": "2025-11-05T18:45:39.961135", "level": "ERROR", "exception": "Traceback (most recent call last):\n  File \"/home/ernesto/PycharmProjects/Openweather-MCP-server-fastAPI-MCP/examples/structured_logging_example.py\", line 132, in example_error_logging\n    result = 10 / 0\n             ~~~^~~\nZeroDivisionError: division by zero", "filename": "structured_logging_example.py", "lineno": 134, "func_name": "example_error_logging"}
+
+
+{"error_message": "Invalid input data", "validation_failed": true, "event": "request_processing_error", "endpoint": "/api/data", "timestamp": "2025-11-05T18:45:39.962779", "level": "ERROR", "request_id": "req-error-123", "exception": "Traceback (most recent call last):\n  File \"/home/ernesto/PycharmProjects/Openweather-MCP-server-fastAPI-MCP/examples/structured_logging_example.py\", line 146, in example_error_logging\n    raise ValueError(\"Invalid input data\")\nValueError: Invalid input data", "filename": "structured_logging_example.py", "lineno": 148, "func_name": "example_error_logging"}
+
+
+✨ Logger configurado con Structlog, Rich y Loguru
+✨ Logger configurado con Structlog, Rich y Loguru
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+Application dependencies configured via DI container
+Not Found
+Circuit Breaker initialized: failure_threshold=5, recovery_timeout=60.0s, success_threshold=2
+Circuit Breaker initialized: failure_threshold=5, recovery_timeout=60.0s, success_threshold=2
+Circuit Breaker initialized: failure_threshold=3, recovery_timeout=60.0s, success_threshold=2
+Circuit Breaker opening after 3 consecutive failures
+Circuit Breaker initialized: failure_threshold=2, recovery_timeout=60.0s, success_threshold=2
+Circuit Breaker opening after 2 consecutive failures
+Circuit Breaker is OPEN, blocking call to successful_function. Retry after 60.0s
+Circuit Breaker initialized: failure_threshold=2, recovery_timeout=0.1s, success_threshold=2
+Circuit Breaker opening after 2 consecutive failures
+Circuit Breaker transitioning to HALF_OPEN after 0.2s
+Circuit Breaker initialized: failure_threshold=2, recovery_timeout=0.1s, success_threshold=2
+Circuit Breaker opening after 2 consecutive failures
+Circuit Breaker transitioning to HALF_OPEN after 0.2s
+Circuit Breaker closing after 2 successful calls
+Circuit Breaker initialized: failure_threshold=2, recovery_timeout=0.1s, success_threshold=2
+Circuit Breaker opening after 2 consecutive failures
+Circuit Breaker transitioning to HALF_OPEN after 0.2s
+Circuit Breaker reopening after failure in HALF_OPEN state
+Circuit Breaker initialized: failure_threshold=2, recovery_timeout=60.0s, success_threshold=2
+Circuit Breaker opening after 2 consecutive failures
+Circuit Breaker manually reset to CLOSED
+Circuit Breaker initialized: failure_threshold=3, recovery_timeout=60.0s, success_threshold=2
+Circuit Breaker initialized: failure_threshold=2, recovery_timeout=60.0s, success_threshold=2
+Circuit Breaker initialized: failure_threshold=5, recovery_timeout=60.0s, success_threshold=2
+Circuit Breaker initialized: failure_threshold=1, recovery_timeout=30.0s, success_threshold=2
+Circuit Breaker opening after 1 consecutive failures
+Circuit Breaker is OPEN, blocking call to failing_function. Retry after 30.0s
+Circuit Breaker initialized: failure_threshold=1, recovery_timeout=30.0s, success_threshold=2
+Circuit Breaker opening after 1 consecutive failures
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+Error building ServiceWithDependency: ServiceWithDependency.__init__() missing 1 required positional argument: 'service_a'
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+Cleared 2 registrations from container
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+Cleared 11 registrations from container
+Global container reset
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+Error resolving ServiceA: Factory failed!
+SimpleDIContainer initialized
+Error resolving FailingService: Constructor failed!
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+Hello World!
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+LocalTokenValidator inicializado
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+LocalTokenValidator inicializado
+Unauthorized MCP request - invalid or missing token
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+LocalTokenValidator inicializado
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+LocalTokenValidator inicializado
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+LocalTokenValidator inicializado
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+LocalTokenValidator inicializado
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+LocalTokenValidator inicializado
+Cleared 10 registrations from container
+Global container reset
+SimpleDIContainer initialized
+Configuring DI container...
+DI container configured successfully
+LocalTokenValidator inicializado
+Cleared 10 registrations from container
+Global container reset
